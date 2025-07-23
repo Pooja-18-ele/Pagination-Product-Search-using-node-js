@@ -1,34 +1,163 @@
-# Pagination-Product-Search-using-node-js
-const Product = require('../models/Product');
+# Simple-E-Commerce-API
+@Entity
+public class User {
+    @Id @GeneratedValue
+    private Long id;
+    private String username;
+    private String password;
+    private String role; // "ROLE_CUSTOMER" or "ROLE_ADMIN"
+}
 
-// GET /api/products?search=shoe&category=men&page=1&limit=10
-exports.getProducts = async (req, res) => {
-  try {
-    const { search = '', category, page = 1, limit = 10 } = req.query;
 
-    // Build filter based on search and category
-    const filter = {};
-    if (search) {
-      filter.name = { $regex: search, $options: 'i' };
+
+@Entity
+public class Product {
+    @Id @GeneratedValue
+    private Long id;
+    private String name;
+    private double price;
+    private S tring description;
+}
+
+
+
+@Entity
+public class CartItem {
+    @Id @GeneratedValue
+    private Long id;
+
+    @ManyToOne
+    private User user;
+
+    @ManyToOne
+    private Product product;
+
+    private int quantity;
+}
+
+
+
+@Entity
+public class Order {
+    @Id @GeneratedValue
+    private Long id;
+
+    @ManyToOne
+    private User user;
+
+    private LocalDateTime orderDate;
+
+    @OneToMany
+    private List<CartItem> items;
+
+
+
+
+
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    @Autowired private JwtFilter jwtFilter;
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.csrf().disable()
+            .authorizeRequests()
+            .antMatchers("/auth/**").permitAll()
+            .antMatchers(HttpMethod.POST, "/products").hasRole("ADMIN")
+            .antMatchers(HttpMethod.PUT, "/products/**").hasRole("ADMIN")
+            .antMatchers(HttpMethod.DELETE, "/products/**").hasRole("ADMIN")
+            .anyRequest().authenticated()
+            .and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+
+        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
     }
-    if (category) {
-      filter.category = { $regex: category, $options: 'i' };
+}
+
+
+
+
+
+
+
+
+
+@RestController
+@RequestMapping("/products")
+public class ProductController {
+    @Autowired private ProductService productService;
+
+    @GetMapping
+    public List<Product> getAllProducts() {
+        return productService.getAll();
     }
 
-    const products = await Product.find(filter)
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public Product addProduct(@RequestBody Product product) {
+        return productService.save(product);
+    }
 
-    const total = await Product.countDocuments(filter);
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Product update(@PathVariable Long id, @RequestBody Product p) {
+        return productService.update(id, p);
+    }
 
-    res.json({
-      page: parseInt(page),
-      limit: parseInt(limit),
-      totalPages: Math.ceil(total / limit),
-      totalItems: total,
-      products
-    });
-  } catch (err) {
-    res.status(500).json({ msg: 'Server Error', error: err.message });
-  }
-};
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public void delete(@PathVariable Long id) {
+        productService.delete(id);
+    }
+}
+
+
+
+
+
+
+@RestController
+@RequestMapping("/cart")
+public class CartController {
+    @Autowired private CartService cartService;
+
+    @PostMapping("/add")
+    public ResponseEntity<?> addToCart(@RequestBody CartItem item, Principal principal) {
+        cartService.addToCart(item, principal.getName());
+        return ResponseEntity.ok("Added to cart");
+    }
+
+    @GetMapping
+    public List<CartItem> getCart(Principal principal) {
+        return cartService.getCart(principal.getName());
+    }
+
+    @DeleteMapping("/{id}")
+    public void removeItem(@PathVariable Long id) {
+        cartService.removeItem(id);
+    }
+}
+
+
+
+
+
+
+@RestController
+@RequestMapping("/orders")
+public class OrderController {
+    @Autowired private OrderService orderService;
+
+    @PostMapping("/place")
+    public ResponseEntity<?> placeOrder(Principal principal) {
+        orderService.placeOrder(principal.getName());
+        return ResponseEntity.ok("Order placed!");
+    }
+
+    @GetMapping
+    public List<Order> getMyOrders(Principal principal) {
+        return orderService.getOrdersByUser(principal.getName());
+    }
+}}
+
+
+
